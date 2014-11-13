@@ -58,8 +58,8 @@ require 'tempfile'
 # bucket on S3 where to store the logs
 @bucket_upload = 'TO_BE_SETUP'
 
-# rds DB identifiers of database to backup
-@DBInstanceIdentifiers = 'TO_BE_SETUP'
+# rds DB identifiers of database to backup, array
+@DBInstanceIdentifiers = ['TO_BE_SETUP']
 
 class LogFile
   DATE_FORMATTER = '%Y-%m-%d_%H-%M-%S'
