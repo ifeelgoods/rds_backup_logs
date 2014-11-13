@@ -1,0 +1,207 @@
+#!/usr/bin/env ruby
+
+# The MIT License (MIT)
+#
+# Copyright (c) 2014 Ifeelgoods
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+require 'json'
+require 'time'
+require 'tempfile'
+
+#
+# Store on S3 logs {bucket_upload}{DB-name}/LOG_TYPE/YEAR/MONTH/DAY
+#
+# REQUIREMENTS
+# ruby > 1.9.3
+#
+# jq http://stedolan.github.io/jq/
+# sudo yum install jq
+# sudo apt-get install jq
+#
+# AWS-CLI http://aws.amazon.com/cli/
+# well configured (either with IAM role or KEY/SECRET)
+#
+# INSTALL
+# adjust @bucket_upload and @DBInstanceIdentifiers variable
+# cp backup_rotated_logs /usr/bin/backup_rotated_logs
+# chmod +x /usr/bin/backup_rotated_logs
+#
+# with cron:
+# cp rds_backup.cron /etc/cron.hourly/rds_backup.cron
+# chmod +x /etc/cron.hourly/rds_backup.cron
+#
+# reload cron (depends of your system)
+#  /etc/init.d/crond restart
+
+
+# AWS regions
+@region = 'us-east-1'
+
+# bucket on S3 where to store the logs
+@bucket_upload = 'TO_BE_SETUP'
+
+# rds DB identifiers of database to backup
+@DBInstanceIdentifiers = 'TO_BE_SETUP'
+
+class LogFile
+  DATE_FORMATTER = '%Y-%m-%d_%H-%M-%S'
+  attr_reader :last_written, :file_name, :type
+
+  def initialize(last_written,file_name)
+    @last_written = Time.at(last_written/1000).utc
+    @file_name = file_name
+    @type = get_type(file_name)
+  end
+
+  def s3_sub_bucket
+    time_namespace = last_written.strftime('%Y/%m/%d')
+    "#{type}/#{time_namespace}"
+  end
+
+  def s3_file_name
+    "#{last_written.strftime(DATE_FORMATTER)}.txt"
+  end
+
+  private
+  def get_type(filename)
+    if filename.match(/^general\/.+/)
+      'general'
+    elsif filename.match(/^error\/.+/)
+      'error'
+    elsif filename.match(/^slowquery\/.+/)
+      'slowquery'
+    end
+  end
+end
+
+class AwsUtil
+  attr_reader :db_instance_identifier, :region
+
+  def initialize(db_instance_identifier, region)
+    @db_instance_identifier = db_instance_identifier
+    @region = region
+  end
+
+  def self.bucket_upload=(bucket)
+    @bucket = bucket
+  end
+
+  def self.bucket_upload
+    @bucket
+  end
+
+  def bucket_upload
+    self.class.bucket_upload
+  end
+
+  def s3_cp(from, to_bucket, to_file)
+    cmd = "s3 cp '#{from}' 's3://#{bucket_upload}/#{db_instance_identifier}/#{to_bucket}/#{to_file}'"
+    execute_aws(cmd)
+  end
+
+  def s3_list(path)
+    cmd = "s3 ls 's3://#{bucket_upload}/#{db_instance_identifier}/#{path}/'"
+    raw_res = execute_aws(cmd)
+
+    # a little bit tricky
+    raw_res.split("\n").map{|res| res.match(/[\w\-]+\.txt/)[0]}
+  end
+
+
+  def rds_download_log(file_name)
+    cmd = "rds download-db-log-file-portion --db-instance-identifier #{db_instance_identifier} --log-file-name '#{file_name}' --max-items 999999999  --starting-token 0 --output text "
+    execute_aws_to_file(cmd)
+  end
+
+# last_written is used here,
+  def s3_file_exist?(log_file)
+    existing_files = s3_list(log_file.s3_sub_bucket)
+    if existing_files.include?(log_file.s3_file_name)
+      true
+    else
+      false
+    end
+  end
+
+  def find_or_store(log_file)
+    unless s3_file_exist?(log_file)
+      file = rds_download_log(log_file.file_name)
+      s3_cp(file.path, log_file.s3_sub_bucket, log_file.s3_file_name)
+    else
+      puts "File #{log_file.inspect} already exist"
+    end
+  end
+
+  def rds_list_logs
+    cmd = "rds describe-db-log-files --db-instance-identifier #{db_instance_identifier}"
+    execute_aws(cmd)
+  end
+
+  def execute_aws(cmd)
+    execute('aws ' << cmd << " --region #{region} ")
+  end
+
+  def execute(cmd)
+    puts "Executing: #{cmd} ..."
+    res = `#{cmd}`
+    puts "Res: #{res}"
+    res
+  end
+
+  def execute_aws_to_file(cmd)
+    execute_to_file('aws ' << cmd << " --region #{region} ")
+  end
+
+  def execute_to_file(cmd)
+    tf = Tempfile.new('db_log_json')
+    cmd << " > #{tf.path}"
+    puts "Storing to file: #{cmd} ..."
+    res = `#{cmd}`
+    puts "Res: #{res}"
+    tf
+  end
+end
+
+AwsUtil.bucket_upload = @bucket_upload
+
+@DBInstanceIdentifiers.each do |db_instance_id|
+  awsu = AwsUtil.new(db_instance_id, @region)
+
+  all_file_logs = JSON.parse(awsu.rds_list_logs)['DescribeDBLogFiles']
+
+# For each log check if not already on s3
+# {"LastWritten"=>1415806800000, "LogFileName"=>"error/mysql-error.log", "Size"=>0}
+  all_file_logs.each do |hash_file|
+    if hash_file['Size'].nil? || (hash_file['Size'] == 0)
+      puts "File #{hash_file} is empty, skipping.."
+      next
+    end
+
+    if hash_file['LogFileName'].match(/.log\z/)
+      puts "File #{hash_file} is currently used, skipping...."
+      next
+    end
+
+    log_file = LogFile.new(hash_file['LastWritten'],hash_file['LogFileName'])
+    awsu.find_or_store(log_file)
+  end
+end
+

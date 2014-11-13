@@ -1,0 +1,5 @@
+#!/bin/bash
+
+mkdir -p /var/log/cron-log
+
+exec /usr/bin/backup_rotated_logs >> /var/log/cron-log/rds_backup.log 2>&1
