@@ -19,11 +19,13 @@ cp backup_rotated_logs /usr/bin/backup_rotated_logs
 chmod +x /usr/bin/backup_rotated_logs
 ```
 ### with cron:
+Create log folder for this one.
+`mkdir /var/log/cron-log/`
+
+Edit your crontab and add:
 ```
-cp rds_backup.cron /etc/cron.hourly/rds_backup.cron
-chmod +x /etc/cron.hourly/rds_backup.cron
+20 * * * */usr/bin/backup_rotated_logs >> /var/log/cron-log/rds_backup.log 2>&1
 ```
 
-
-reload cron (depends of your system)
-`/etc/init.d/crond restart`
+/!\ As AWS RDS don't write instantly logs, it is recommended to trigger the script after 15min of the hour otherwise
+you could have double entry for a same log. (as the check is based on the last written information)

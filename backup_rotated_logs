@@ -27,7 +27,9 @@ require 'time'
 require 'tempfile'
 
 #
-# Store on S3 logs {bucket_upload}{DB-name}/LOG_TYPE/YEAR/MONTH/DAY
+# Store on S3 logs
+# To folder {bucket_upload}{DB-name}/LOG_TYPE/YEAR/MONTH/DAY
+# To file {type}{timestamp}.txt
 #
 # REQUIREMENTS
 # ruby > 1.9.3
@@ -77,7 +79,7 @@ class LogFile
   end
 
   def s3_file_name
-    "#{last_written.strftime(DATE_FORMATTER)}.txt"
+    "#{type}-#{last_written.strftime(DATE_FORMATTER)}.txt"
   end
 
   private
