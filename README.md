@@ -1,15 +1,8 @@
 Tool to backup RDS logs to S3 `{bucket_upload}{DB-name}/LOG_TYPE/YEAR/MONTH/DAY`
 
 ## REQUIREMENTS
-ruby > 1.9.3
-
-### jq http://stedolan.github.io/jq/
-```
-sudo yum install jq
-sudo apt-get install jq
-```
-
-### aws-cli http://aws.amazon.com/cli/
+* ruby >= 1.9.3
+* aws-cli http://aws.amazon.com/cli/
 well configured (either with IAM role or KEY/SECRET)
 
 ## INSTALL
