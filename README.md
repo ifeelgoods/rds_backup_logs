@@ -6,7 +6,8 @@ Tool to backup RDS logs to S3 `{bucket_upload}{DB-name}/LOG_TYPE/YEAR/MONTH/DAY`
 well configured (either with IAM role or KEY/SECRET)
 
 ## INSTALL
-adjust `@bucket_upload` and `@DBInstanceIdentifiers` variable in the script file
+Set up environment variables BUCKET_UPLOAD and DB_INSTANCES_IDS (comma separated)
+
 ```
 cp backup_rotated_logs /usr/bin/backup_rotated_logs
 chmod +x /usr/bin/backup_rotated_logs

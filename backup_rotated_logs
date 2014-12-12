@@ -53,11 +53,17 @@ require 'tempfile'
 # AWS regions
 @region = 'us-east-1'
 
+unless ENV['BUCKET_UPLOAD'] && ENV['DB_INSTANCE_IDS']
+  puts 'Environement variable BUCKET_UPLOAD and DB_INSTANCE_IDS have to be set up'
+  puts 'BUCKET_UPLOAD: bucket where to stored the logs'
+  puts 'DB_INSTANCES_IDS: list of ids comma separated'
+end
+
 # bucket on S3 where to store the logs
-@bucket_upload = 'TO_BE_SETUP'
+@bucket_upload = ENV['BUCKET_UPLOAD']
 
 # rds DB identifiers of database to backup, array
-@DBInstanceIdentifiers = ['TO_BE_SETUP']
+@DBInstanceIdentifiers = ENV['DB_INSTANCE_IDS'].split(',')
 
 class LogFile
   DATE_FORMATTER = '%Y-%m-%d_%H-%M-%S'
