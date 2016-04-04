@@ -127,7 +127,7 @@ class AwsUtil
 
     if raw_res
       # a little bit tricky
-      raw_res.split("\n").map{|res| res.match(/[\w\-]+\.txt/)[0]}
+      raw_res.split("\n").select{|res| res.match(/[\w\-]+\.txt/)}.map{|res| res.match(/[\w\-]+\.txt/)[0]}
     else
       []
     end
