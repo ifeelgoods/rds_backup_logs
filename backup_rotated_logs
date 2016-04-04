@@ -125,8 +125,12 @@ class AwsUtil
     cmd = "s3 ls 's3://#{bucket_upload}/#{db_instance_identifier}/#{path}/'"
     raw_res = execute_aws(cmd)
 
-    # a little bit tricky
-    raw_res.split("\n").map{|res| res.match(/[\w\-]+\.txt/)[0]}
+    if raw_res
+      # a little bit tricky
+      raw_res.split("\n").map{|res| res.match(/[\w\-]+\.txt/)[0]}
+    else
+      []
+    end
   end
 
 
